@@ -1,10 +1,9 @@
 import { Key } from "node:readline";
 import { Prompt } from "@clack/core";
 import { TextOptions } from "@clack/prompts";
-import { S_CHECKBOX_ACTIVE, S_CHECKBOX_SELECTED, S_CHECKBOX_INACTIVE, S_BAR, S_BAR_END, box, S_INFO } from "./utils";
 import color from "picocolors";
 import { createEffect } from "../../reactivity/core";
-import { NL, b, ct, s, t, when, x } from "../builder";
+import { render } from "./render";
 
 export type Option = { value: any; label?: string; hint?: string; group?: string };
 
@@ -49,25 +48,6 @@ const sortByGroup = <T extends Option>(options: T[]) => {
   });
 };
 
-const opt = (
-  option: any,
-  state: "inactive" | "active" | "selected" | "active-selected" | "submitted" | "cancelled",
-) => {
-  const label = option.label ?? String(option.value);
-  if (state === "active") {
-    return `${color.cyan(S_CHECKBOX_ACTIVE)} ${label} ${option.hint ? color.dim(`(${option.hint})`) : ""}`;
-  } else if (state === "selected") {
-    return `${color.green(S_CHECKBOX_SELECTED)} ${color.dim(label)}`;
-  } else if (state === "cancelled") {
-    return `${color.strikethrough(color.dim(label))}`;
-  } else if (state === "active-selected") {
-    return `${color.green(S_CHECKBOX_SELECTED)} ${label} ${option.hint ? color.dim(`(${option.hint})`) : ""}`;
-  } else if (state === "submitted") {
-    return `${color.dim(label)}`;
-  }
-  return `${color.dim(S_CHECKBOX_INACTIVE)} ${color.dim(label)}`;
-};
-
 const aliases = new Map([
   ["k", "up"],
   ["j", "down"],
@@ -75,9 +55,11 @@ const aliases = new Map([
   ["l", "right"],
 ]);
 
-interface AutocompleteTextOptions<T extends Option> extends TextOptions {
+export type RENDERTHIS<T extends Option> = Omit<AutocompleteText<T>, "prompt">;
+
+export interface AutocompleteTextOptions<T extends Option> extends TextOptions {
   options: () => T[];
-  render: (this: Omit<AutocompleteText<T>, "prompt">) => string | void;
+  render: (this: RENDERTHIS<T>) => string | void;
 }
 
 class AutocompleteText<T extends Option> extends Prompt {
@@ -226,29 +208,6 @@ class AutocompleteText<T extends Option> extends Prompt {
   }
 }
 
-const getTerminalSize = () => {
-  const stdout = process.stdout.getWindowSize();
-
-  return {
-    width: stdout[0],
-    height: stdout[1],
-  };
-};
-
-const space = (n: number) => ` `.repeat(n);
-
-const BULLET = "•";
-
-const instructions = color.gray(
-  `↓/j down ${BULLET} ↑/k up ${BULLET} tab select ${BULLET} Ctrl-C cancel ${BULLET} / filter`,
-);
-
-const searchInstructions = color.gray(
-  `tab select ${BULLET} ESC cancel filter ${BULLET} :<number> to highlight by index`,
-);
-
-const CYAN_BAR = color.cyan(S_BAR);
-
 export const autocomplete = <T extends Option>(opts: Omit<AutocompleteTextOptions<T>, "render">) => {
   return new AutocompleteText({
     options: opts.options,
@@ -258,77 +217,7 @@ export const autocomplete = <T extends Option>(opts: Omit<AutocompleteTextOption
     defaultValue: opts.defaultValue,
     initialValue: opts.initialValue,
     render() {
-      const selected = when(
-        this.selected.length === 0,
-        ct("gray", "Nothing Selected"),
-        this.selected.map((option, i) => ct("red", option.label ?? "")).join(" "),
-      );
-
-      const placeholder = when(
-        opts.placeholder,
-        (p) => x(ct("inverse", p[0]), ct("dim", opts.placeholder!.slice(1))),
-        color.inverse(color.hidden("_")),
-      );
-
-      const value = typeof this.value === "string" ? (!this.value ? placeholder : this.valueWithCursor) : "";
-
-      const textView = x(ct("cyan", "? "), "Filter: ", value, NL);
-
-      const noResults = color.red("No results");
-
-      let uniqueGroups = new Set();
-      let start = Math.max(0, this.cursor - 11);
-
-      const filteredOptions = this.filteredOptions
-        .map((option, i) => {
-          if (i < start || i > start + 11) return;
-
-          const selected = this.selected.find((v) => v.value === option.value) !== undefined;
-          const has = option.group && uniqueGroups.has(option.group);
-          if (!has && option.group) {
-            uniqueGroups.add(option.group);
-          }
-
-          const isFocused = this.cursor === i;
-
-          const active = (i === 0 && this.mode === "search") || (this.mode === "explore" && isFocused);
-          const state = when(selected, "selected", when(active, "active", "inactive"));
-
-          const spacing = i > 9 ? " " : "  ";
-
-          const groupView = x(
-            when(has || !option.group, "", x(NL, CYAN_BAR, ct("bgBlue", ct("black", option.group!)))),
-            when(!has && option.group !== undefined, x(NL, CYAN_BAR, space(2)), ""),
-          );
-
-          // prettier-ignore
-          return x(
-            groupView,
-            String(i), ":", spacing,
-            when(isFocused, ct("bgBlack", opt(option, state)), ct("dim", opt(option, state))),
-          );
-        })
-        .filter(Boolean)
-        .join(x(NL, CYAN_BAR, space(2)));
-
-      // prettier-ignore
-      const options = x(
-        CYAN_BAR, space(2), when(!this.filteredOptions.length, noResults, filteredOptions),
-        NL,
-        ct("cyan", S_BAR_END),
-        NL,
-      );
-
-      // prettier-ignore
-      return(
-      x(
-          CYAN_BAR, space(1), NL, space(1), 
-          CYAN_BAR, ct('yellow', S_CHECKBOX_SELECTED), " Selected Packages: ", selected, NL, 
-          CYAN_BAR, space(1), NL,
-          when(this.mode === 'search', x(CYAN_BAR, space(1), textView), ""),
-          options, NL, when(this.mode === 'search', searchInstructions, instructions)
-        )
-      )
+      return render.call(this, opts);
     },
   }).prompt() as Promise<T[] | symbol>;
 };

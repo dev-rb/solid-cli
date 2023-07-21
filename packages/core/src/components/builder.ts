@@ -1,5 +1,6 @@
 import { createColors } from "picocolors";
 import { Colors } from "picocolors/types";
+import { S_BAR_END } from "./autocomplete/utils";
 const ccolor = createColors();
 interface BuilderProps {
   str: string;
@@ -90,7 +91,11 @@ export function when<T>(conditon: T | any, whenTrue: T | ((v: NonNullable<T>) =>
     : fallback;
 }
 
-export function x(...args: string[]) {
+export function w(fn: () => string) {
+  return fn();
+}
+
+export function join(...args: string[]) {
   return args.join("");
 }
 
@@ -105,3 +110,24 @@ export function ct(color: Omit<keyof Colors, "isColorSupported">, ...args: strin
 }
 
 export const NL = "\n";
+
+export const barLeft = (bar: string, between?: string) => (str: string) => {
+  const split = str.split("\n");
+
+  let s = "";
+
+  let ended = false;
+  for (let i = 0; i < split.length; i++) {
+    const part = split[i];
+
+    if (part === "<END>") {
+      s += S_BAR_END;
+      ended = true;
+      continue;
+    }
+
+    s += (ended ? "" : bar) + (between ?? "") + part + "\n";
+  }
+
+  return s;
+};
