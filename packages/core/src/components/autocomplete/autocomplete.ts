@@ -4,6 +4,7 @@ import { TextOptions } from "@clack/prompts";
 import { S_CHECKBOX_ACTIVE, S_CHECKBOX_SELECTED, S_CHECKBOX_INACTIVE, S_BAR, S_BAR_END, box, S_INFO } from "./utils";
 import color from "picocolors";
 import { createEffect } from "../../reactivity/core";
+import { NL, b, ct, s, t, when, x } from "../builder";
 
 export type Option = { value: any; label?: string; hint?: string; group?: string };
 
@@ -246,6 +247,8 @@ const searchInstructions = color.gray(
   `tab select ${BULLET} ESC cancel filter ${BULLET} :<number> to highlight by index`,
 );
 
+const CYAN_BAR = color.cyan(S_BAR);
+
 export const autocomplete = <T extends Option>(opts: Omit<AutocompleteTextOptions<T>, "render">) => {
   return new AutocompleteText({
     options: opts.options,
@@ -255,22 +258,27 @@ export const autocomplete = <T extends Option>(opts: Omit<AutocompleteTextOption
     defaultValue: opts.defaultValue,
     initialValue: opts.initialValue,
     render() {
-      const selected =
-        this.selected.length === 0
-          ? color.gray("Nothing selected")
-          : this.selected.map((option, i) => `${color.red(option.label)}`).join(" ");
-      const placeholder = opts.placeholder
-        ? color.inverse(opts.placeholder[0]) + color.dim(opts.placeholder.slice(1))
-        : color.inverse(color.hidden("_"));
+      const selected = when(
+        this.selected.length === 0,
+        ct("gray", "Nothing Selected"),
+        this.selected.map((option, i) => ct("red", option.label ?? "")).join(" "),
+      );
+
+      const placeholder = when(
+        opts.placeholder,
+        (p) => x(ct("inverse", p[0]), ct("dim", opts.placeholder!.slice(1))),
+        color.inverse(color.hidden("_")),
+      );
 
       const value = typeof this.value === "string" ? (!this.value ? placeholder : this.valueWithCursor) : "";
 
-      const textView = `${color.cyan("?")} Filter: ` + value + "\n";
+      const textView = x(ct("cyan", "? "), "Filter: ", value, NL);
 
       const noResults = color.red("No results");
 
       let uniqueGroups = new Set();
       let start = Math.max(0, this.cursor - 11);
+
       const filteredOptions = this.filteredOptions
         .map((option, i) => {
           if (i < start || i > start + 11) return;
@@ -284,31 +292,43 @@ export const autocomplete = <T extends Option>(opts: Omit<AutocompleteTextOption
           const isFocused = this.cursor === i;
 
           const active = (i === 0 && this.mode === "search") || (this.mode === "explore" && isFocused);
-          const state = selected ? "selected" : active ? "active" : "inactive";
+          const state = when(selected, "selected", when(active, "active", "inactive"));
 
           const spacing = i > 9 ? " " : "  ";
 
-          const groupView = `${
-            has || !option.group ? "" : `\n${color.cyan(S_BAR)}${color.bgBlue(color.black(option.group))}`
-          } ${!has && option.group ? `\n${color.cyan(S_BAR)}   ` : ""}`;
+          const groupView = x(
+            when(has || !option.group, "", x(NL, CYAN_BAR, ct("bgBlue", ct("black", option.group!)))),
+            when(!has && option.group !== undefined, x(NL, CYAN_BAR, space(2)), ""),
+          );
 
-          return groupView + `${i}:${spacing}` + (isFocused ? color.bgBlack(opt(option, state)) : opt(option, state));
+          // prettier-ignore
+          return x(
+            groupView,
+            String(i), ":", spacing,
+            when(isFocused, ct("bgBlack", opt(option, state)), ct("dim", opt(option, state))),
+          );
         })
         .filter(Boolean)
-        .join(`\n${color.cyan(S_BAR)}  `);
+        .join(x(NL, CYAN_BAR, space(2)));
 
       // prettier-ignore
-      const options = `${color.cyan(S_BAR)}  ${this.filteredOptions.length ? filteredOptions : noResults}\n${color.cyan(S_BAR_END,)}\n`;
-
-      return (
-        `${color.cyan(S_BAR)} \n ${color.cyan(S_BAR)} ${color.yellow(
-          S_CHECKBOX_SELECTED,
-        )} Selected Packages: ${selected}\n${color.cyan(S_BAR)} \n` +
-        (this.mode === "search" ? `${color.cyan(S_BAR)} ` + textView : "") +
-        options +
-        "\n" +
-        (this.mode === "search" ? searchInstructions : instructions)
+      const options = x(
+        CYAN_BAR, space(2), when(!this.filteredOptions.length, noResults, filteredOptions),
+        NL,
+        ct("cyan", S_BAR_END),
+        NL,
       );
+
+      // prettier-ignore
+      return(
+      x(
+          CYAN_BAR, space(1), NL, space(1), 
+          CYAN_BAR, ct('yellow', S_CHECKBOX_SELECTED), " Selected Packages: ", selected, NL, 
+          CYAN_BAR, space(1), NL,
+          when(this.mode === 'search', x(CYAN_BAR, space(1), textView), ""),
+          options, NL, when(this.mode === 'search', searchInstructions, instructions)
+        )
+      )
     },
   }).prompt() as Promise<T[] | symbol>;
 };
